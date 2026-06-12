@@ -16,11 +16,15 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Remove="archive.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Reference Include="Assembly-CSharp">
-      <HintPath>..\game\Assembly-CSharp.dll</HintPath>
+      <HintPath>..\..\COMPILER_HERE\game\Assembly-CSharp.dll</HintPath>
     </Reference>
     <Reference Include="Mirage">
-      <HintPath>..\game\Mirage.dll</HintPath>
+      <HintPath>..\..\COMPILER_HERE\game\Mirage.dll</HintPath>
     </Reference>
   </ItemGroup>
 

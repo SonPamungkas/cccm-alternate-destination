@@ -130,6 +130,21 @@ namespace AlteredDestination
                                     {
                                         idField.SetValue(missile, closestEnemy.persistentID);
                                     }
+
+                                    // Also update the seeker's target to ensure universal retargeting
+                                    FieldInfo seekerField = AccessTools.Field(typeof(Missile), "seeker");
+                                    if (seekerField != null)
+                                    {
+                                        object seeker = seekerField.GetValue(missile);
+                                        if (seeker != null)
+                                        {
+                                            FieldInfo seekerTargetField = AccessTools.Field(seeker.GetType(), "targetUnit");
+                                            if (seekerTargetField != null)
+                                            {
+                                                seekerTargetField.SetValue(seeker, closestEnemy);
+                                            }
+                                        }
+                                    }
                                 }
                                 catch { }
 
@@ -425,11 +440,14 @@ namespace AlteredDestination
                     // TERMINAL PHASE: Apply the full custom flight behavior (spread + direct strike + speed inheritance)
                     aimPoint.x = dest.x + offsetX;
                     aimPoint.z = dest.z + offsetZ;
-                    aimPoint.y = __instance.GlobalPosition().y;
+                    if (cSeeker != null)
+                    {
+                        aimPoint.y = __instance.GlobalPosition().y;
+                    }
                     targetVel = newTargetVel;
 
                     // Engage absolute physics lock against pop-up behavior + height failsafe
-                    ApplyCounterPitch(__instance);
+                    if (cSeeker != null) ApplyCounterPitch(__instance);
                 }
                 else if (data.targetUnit == null)
                 {

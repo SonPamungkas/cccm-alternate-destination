@@ -16,10 +16,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Remove="archive.cs" />
-  </ItemGroup>
-
-  <ItemGroup>
     <Reference Include="Assembly-CSharp">
       <HintPath>..\..\COMPILER_HERE\game\Assembly-CSharp.dll</HintPath>
     </Reference>

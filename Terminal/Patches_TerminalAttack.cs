@@ -94,7 +94,9 @@ namespace AlteredDestination
             {
                 bool isTerminal = terminalModeRef(cSeeker);
                 Unit earlyTarget = seekerTargetRef(cSeeker) ?? missileTargetRef(__instance);
-                if (isTerminal && !neuteredSeekersCache.TryGetValue(cSeeker, out _))
+                bool isShip = IsShip(earlyTarget);
+                bool directNaval = AlteredDestinationPlugin.DirectNaval.Value && isShip;
+                if (isTerminal && directNaval && !neuteredSeekersCache.TryGetValue(cSeeker, out _))
                 {
                     TopAttack top = topAttackRef(cSeeker);
                     if (top != null)
@@ -109,12 +111,11 @@ namespace AlteredDestination
                 float cruiseAltitude = CruiseAltitudeRegistry.GetCruiseAltitude(__instance, altitudeTargetRef(cSeeker));
                 altitudeTargetRef(cSeeker) = cruiseAltitude;
                 Unit targetUnit = earlyTarget;
-                bool isShip = IsShip(targetUnit);
                 if (targetPartRef(cSeeker) == null && targetUnit != null)
                 {
                     targetPartRef(cSeeker) = targetUnit.GetRandomPart();
                 }
-                if (AlteredDestinationPlugin.DirectNaval.Value && isShip && isTerminal && targetUnit != null)
+                if (directNaval && isTerminal && targetUnit != null)
                 {
                     GlobalPosition tPos = targetUnit.GlobalPosition();
                     aimPoint.x = tPos.x;

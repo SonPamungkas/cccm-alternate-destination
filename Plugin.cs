@@ -19,7 +19,7 @@ namespace AlteredDestination
         public List<OverrideData> waypoints = new List<OverrideData>();
         public int colorIndex = -1;
     }
-    [BepInPlugin("neutral.checkpointcharlie.cruisemissile", "Checkpoint Charlie's Cruise Missile (Alternate destination)", "1.3.0")]
+    [BepInPlugin("neutral.checkpointcharlie.cruisemissile", "Checkpoint Charlie's Cruise Missile (Alternate destination)", "1.3.1")]
     public class AlteredDestinationPlugin : BaseUnityPlugin
     {
         public const string WaypointAction = "MissileWaypoint";

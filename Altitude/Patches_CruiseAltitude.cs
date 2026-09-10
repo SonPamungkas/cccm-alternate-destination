@@ -12,6 +12,13 @@ namespace AlteredDestination
             float vanillaAltitude = altitudeTargetRef(__instance);
             if (missile != null) CruiseAltitudeRegistry.TryBind(missile.definition, vanillaAltitude);
             altitudeTargetRef(__instance) = CruiseAltitudeRegistry.RegisterCruiseAltitude(missile, vanillaAltitude);
+            if (missile != null)
+            {
+                FlareToggleRegistry.TryBind(missile.definition);
+                FlareToggleRegistry.RegisterMissile(missile);
+                JamToggleRegistry.TryBind(missile.definition);
+                JamToggleRegistry.RegisterMissile(missile);
+            }
             if (missile != null) SmartSwarm.RegisterHQ(missile.NetworkHQ);
         }
     }

@@ -6,14 +6,13 @@ namespace AlteredDestination
     [HarmonyPatch(typeof(DynamicMap), "MapControls")]
     public static class DynamicMap_MapControls_Patch
     {
-        private const float RetargetRadius = 1000f;
         public static void Postfix(DynamicMap __instance)
         {
             if (!DynamicMap.mapMaximized || !Input.GetMouseButtonDown(1)) return;
             if (!__instance.TryGetCursorCoordinates(out GlobalPosition cursorCoords)) return;
-            bool keyHeld = IsAppendHeld();
+            bool keyHeld = MapWaypointHelper.IsAppendHeld();
             bool append = keyHeld && MapRouteDisplay.SessionActive;
-            cursorCoords.y = SampleTerrainHeight(cursorCoords);
+            cursorCoords.y = MapWaypointHelper.SampleTerrainHeight(cursorCoords);
             Unit clickedEnemy = null;
             int salvoColor = -1;
             bool scanned = false;
@@ -23,7 +22,7 @@ namespace AlteredDestination
                 if (!(baseIcon is UnitMapIcon unitIcon) || !(unitIcon.unit is Missile missile)) continue;
                 if (!scanned)
                 {
-                    clickedEnemy = FindEnemyNear(cursorCoords);
+                    clickedEnemy = MapWaypointHelper.FindEnemyNear(cursorCoords);
                     scanned = true;
                 }
                 if (!AlteredDestinationPlugin.MissileWaypoints.TryGetValue(missile, out var waypointData))
@@ -59,13 +58,17 @@ namespace AlteredDestination
                 AlteredDestinationPlugin.Log($"Missile waypoint {verb}{onto} at {cursorCoords}");
             }
         }
+        public static bool IsAppendHeld() => MapWaypointHelper.IsAppendHeld();
+    }
+    public static class MapWaypointHelper
+    {
         public static bool IsAppendHeld()
         {
             if (!ExtraInputManager.RewiredInitialized) return false;
             Rewired.Player player = Rewired.ReInput.players.GetPlayer(0);
             return player != null && player.GetButton(AlteredDestinationPlugin.WaypointAction);
         }
-        private static float SampleTerrainHeight(GlobalPosition cursorCoords)
+        public static float SampleTerrainHeight(GlobalPosition cursorCoords)
         {
             Vector3 localClick = cursorCoords.ToLocalPosition();
             Vector3 rayOrigin = new Vector3(localClick.x, 20000f, localClick.z);
@@ -80,10 +83,33 @@ namespace AlteredDestination
             }
             return cursorCoords.y;
         }
-        private static Unit FindEnemyNear(GlobalPosition cursorCoords)
+        public static Unit FindEnemyNear(GlobalPosition cursorCoords)
         {
+            if (DynamicMap.i != null && DynamicMap.i.mapIcons != null)
+            {
+                Vector3 mousePos = Input.mousePosition;
+                float bestScreenDistSq = 50f * 50f; 
+                Unit bestScreenUnit = null;
+                var icons = DynamicMap.i.mapIcons;
+                for (int i = 0; i < icons.Count; i++)
+                {
+                    if (!(icons[i] is UnitMapIcon unitIcon)) continue;
+                    Unit u = unitIcon.unit;
+                    if (u == null || u is Missile || u.disabled || !u.gameObject.activeInHierarchy || !unitIcon.gameObject.activeInHierarchy)
+                        continue;
+                    if (DynamicMap.GetFactionMode(u.NetworkHQ) != FactionMode.Enemy)
+                        continue;
+                    float distSq = (mousePos - unitIcon.transform.position).sqrMagnitude;
+                    if (distSq < bestScreenDistSq)
+                    {
+                        bestScreenDistSq = distSq;
+                        bestScreenUnit = u;
+                    }
+                }
+                if (bestScreenUnit != null) return bestScreenUnit;
+            }
             Unit closest = null;
-            float closestDist = RetargetRadius;
+            float closestDist = 100f;
             var allUnits = UnitRegistry.allUnits;
             for (int i = 0; i < allUnits.Count; i++)
             {

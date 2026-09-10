@@ -96,6 +96,15 @@ namespace AlteredDestination
                 if (MissileUtil.GetTarget(m) != sharedTarget) continue;
                 if (MissileUtil.GetSeeker(m) is OpticalSeekerCruiseMissile cs && terminalModeRef(cs)) continue;
                 if (FastMath.InRange(m.GlobalPosition(), threatPos, minRange)) continue;
+                Vector3 toThreat = threatPos - m.GlobalPosition();
+                toThreat.y = 0f;
+                Vector3 fwd = m.transform.forward;
+                fwd.y = 0f;
+                if (toThreat.sqrMagnitude > 1f && fwd.sqrMagnitude > 0.01f)
+                {
+                    float dot = Vector3.Dot(fwd.normalized, toThreat.normalized);
+                    if (dot < AlteredDestinationPlugin.SwarmMinAspectCos) continue;
+                }
                 pool.Add(m);
             }
             if (pool.Count == 0) return null;

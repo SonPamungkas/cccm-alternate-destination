@@ -7,18 +7,36 @@ namespace AlteredDestination
     [HarmonyPatch(typeof(Missile), "SetAimpoint")]
     public static class Missile_SetAimpoint_Patch
     {
-        private static readonly AccessTools.FieldRef<Missile, MissileSeeker> seekerRef = AccessTools.FieldRefAccess<Missile, MissileSeeker>("seeker");
-        private static readonly AccessTools.FieldRef<OpticalSeekerCruiseMissile, bool> terminalModeRef = AccessTools.FieldRefAccess<OpticalSeekerCruiseMissile, bool>("terminalMode");
-        private static readonly AccessTools.FieldRef<OpticalSeekerCruiseMissile, float> altitudeTargetRef = AccessTools.FieldRefAccess<OpticalSeekerCruiseMissile, float>("altitudeTarget");
-        private static readonly AccessTools.FieldRef<Missile, Unit> missileTargetRef = AccessTools.FieldRefAccess<Missile, Unit>("target");
-        private static readonly AccessTools.FieldRef<MissileSeeker, Unit> seekerTargetRef = AccessTools.FieldRefAccess<MissileSeeker, Unit>("targetUnit");
-        private static readonly AccessTools.FieldRef<OpticalSeekerCruiseMissile, Transform> targetPartRef = AccessTools.FieldRefAccess<OpticalSeekerCruiseMissile, Transform>("targetPart");
-        private static readonly AccessTools.FieldRef<OpticalSeekerCruiseMissile, TopAttack> topAttackRef = AccessTools.FieldRefAccess<OpticalSeekerCruiseMissile, TopAttack>("topAttack");
-        private static readonly AccessTools.FieldRef<OpticalSeekerCruiseMissile, JinkEvasion> jinkRef = AccessTools.FieldRefAccess<OpticalSeekerCruiseMissile, JinkEvasion>("jinkEvasion");
-        private static Type shipType = AccessTools.TypeByName("Ship");
-        private static ConditionalWeakTable<Unit, StrongBox<bool>> isShipCache = new ConditionalWeakTable<Unit, StrongBox<bool>>();
-        private static ConditionalWeakTable<OpticalSeekerCruiseMissile, StrongBox<bool>> neuteredSeekersCache = new ConditionalWeakTable<OpticalSeekerCruiseMissile, StrongBox<bool>>();
-        private static ConditionalWeakTable<Missile, StrongBox<float>> failsafeTimers = new ConditionalWeakTable<Missile, StrongBox<float>>();
+        private static readonly AccessTools.FieldRef<Missile, MissileSeeker> seekerRef =
+            AccessTools.FieldRefAccess<Missile, MissileSeeker>("seeker");
+        private static readonly AccessTools.FieldRef<OpticalSeekerCruiseMissile, bool> terminalModeRef =
+            AccessTools.FieldRefAccess<OpticalSeekerCruiseMissile, bool>("terminalMode");
+        private static readonly AccessTools.FieldRef<OpticalSeekerCruiseMissile, float> altitudeTargetRef =
+            AccessTools.FieldRefAccess<OpticalSeekerCruiseMissile, float>("altitudeTarget");
+        private static readonly AccessTools.FieldRef<Missile, Unit> missileTargetRef =
+            AccessTools.FieldRefAccess<Missile, Unit>("target");
+        private static readonly AccessTools.FieldRef<MissileSeeker, Unit> seekerTargetRef =
+            AccessTools.FieldRefAccess<MissileSeeker, Unit>("targetUnit");
+        private static readonly AccessTools.FieldRef<OpticalSeekerCruiseMissile, Transform> targetPartRef =
+            AccessTools.FieldRefAccess<OpticalSeekerCruiseMissile, Transform>("targetPart");
+        private static readonly AccessTools.FieldRef<OpticalSeekerCruiseMissile, TopAttack> topAttackRef =
+            AccessTools.FieldRefAccess<OpticalSeekerCruiseMissile, TopAttack>("topAttack");
+        private static readonly AccessTools.FieldRef<OpticalSeekerCruiseMissile, JinkEvasion> jinkRef =
+            AccessTools.FieldRefAccess<OpticalSeekerCruiseMissile, JinkEvasion>("jinkEvasion");
+        private static readonly Type shipType = AccessTools.TypeByName("Ship");
+        private static readonly ConditionalWeakTable<Unit, StrongBox<bool>> isShipCache =
+            new ConditionalWeakTable<Unit, StrongBox<bool>>();
+        private static readonly ConditionalWeakTable<OpticalSeekerCruiseMissile, StrongBox<bool>> neuteredSeekersCache =
+            new ConditionalWeakTable<OpticalSeekerCruiseMissile, StrongBox<bool>>();
+        private static readonly ConditionalWeakTable<OpticalSeekerCruiseMissile, StrongBox<bool>> loggedTerminalModeCache =
+            new ConditionalWeakTable<OpticalSeekerCruiseMissile, StrongBox<bool>>();
+        private sealed class ShipSplitEntry
+        {
+            public Unit target;
+            public TerminalMode mode;
+        }
+        private static readonly ConditionalWeakTable<OpticalSeekerCruiseMissile, ShipSplitEntry> shipSplitModeCache =
+            new ConditionalWeakTable<OpticalSeekerCruiseMissile, ShipSplitEntry>();
         public static bool IsShip(Unit targetUnit)
         {
             if (targetUnit == null) return false;
@@ -33,100 +51,156 @@ namespace AlteredDestination
             isShipCache.Add(targetUnit, new StrongBox<bool>(isShip));
             return isShip;
         }
-        private static void ApplyCounterPitch(Missile missile)
+        public static TerminalMode ResolveSmartTerminalMode(Unit target, OpticalSeekerCruiseMissile cSeeker, SalvoMemberState salvoState)
         {
-            if (missile.rb == null) return;
-            float currentTime = Time.time;
-            bool inEmergency = false;
-            if (failsafeTimers.TryGetValue(missile, out var timerBox))
+            if (target == null) return TerminalMode.Vanilla;
+            if (IsShip(target))
             {
-                if (currentTime < timerBox.Value)
+                if (cSeeker != null && shipSplitModeCache.TryGetValue(cSeeker, out var cached) && cached.target == target)
                 {
-                    inEmergency = true;
+                    return cached.mode;
                 }
-                else if (missile.GlobalPosition().y < 1.0)
+                TerminalMode mode = (salvoState != null && salvoState.salvoIndex % 2 == 1)
+                    ? AlteredDestinationPlugin.ShipTerminalModeB.Value
+                    : AlteredDestinationPlugin.ShipTerminalModeA.Value;
+                if (cSeeker != null)
                 {
-                    timerBox.Value = currentTime + 1.0f;
-                    inEmergency = true;
+                    shipSplitModeCache.Remove(cSeeker);
+                    shipSplitModeCache.Add(cSeeker, new ShipSplitEntry { target = target, mode = mode });
                 }
+                return mode;
             }
-            else if (missile.GlobalPosition().y < 1.0)
+            if (target is Building || (target.definition != null && target.definition.mass > 500000f))
             {
-                failsafeTimers.Add(missile, new StrongBox<float>(currentTime + 1.0f));
-                inEmergency = true;
-            }
-            else
-            {
-                failsafeTimers.Add(missile, new StrongBox<float>(0f));
-            }
-            Vector3 vel = missile.rb.velocity;
-            bool needsVelUpdate = false;
-            if (inEmergency)
-            {
-                if (vel.y < 0.5f)
+                string bName = target.name;
+                if (!IsShip(target))
                 {
-                    vel.y = 0.5f;
-                    needsVelUpdate = true;
-                }
-                Vector3 desiredUp = (Vector3.up + missile.transform.forward * 0.05f).normalized;
-                Vector3 emergencyAxis = Vector3.Cross(missile.transform.up, desiredUp);
-                missile.rb.AddTorque(emergencyAxis * 50f, ForceMode.Acceleration);
-            }
-            else
-            {
-                if (Mathf.Abs(vel.y) > 0.1f)
-                {
-                    vel.y = 0f;
-                    needsVelUpdate = true;
-                }
-                Vector3 tiltAxis = Vector3.Cross(missile.transform.up, Vector3.up);
-                if (tiltAxis.sqrMagnitude > 0.0001f)
-                {
-                    missile.rb.AddTorque(tiltAxis * 50f, ForceMode.Acceleration);
+                    return AlteredDestinationPlugin.BuildingTerminalMode.Value;
                 }
             }
-            if (needsVelUpdate) missile.rb.velocity = vel;
+            string tName = target.name ?? "";
+            string defName = target.definition != null ? (target.definition.unitName ?? target.definition.name ?? "") : "";
+            string combined = (tName + " " + defName).ToLowerInvariant();
+            bool hasGun = false;
+            bool hasMissile = false;
+            if (target.weaponStations != null)
+            {
+                for (int i = 0; i < target.weaponStations.Count; i++)
+                {
+                    var ws = target.weaponStations[i];
+                    if (ws == null || ws.Weapons == null) continue;
+                    for (int w = 0; w < ws.Weapons.Count; w++)
+                    {
+                        var weapon = ws.Weapons[w];
+                        if (weapon is Gun) hasGun = true;
+                        else if (weapon is MissileLauncher) hasMissile = true;
+                    }
+                }
+            }
+            bool isSAM = hasMissile ||
+                         target.radar != null ||
+                         combined.Contains("sam") ||
+                         combined.Contains("irsam") ||
+                         combined.Contains("rsam") ||
+                         combined.Contains("radar") ||
+                         combined.Contains("missile");
+            if (isSAM)
+            {
+                return AlteredDestinationPlugin.SAMTerminalMode.Value;
+            }
+            bool isAAA = hasGun ||
+                         combined.Contains("aaa") ||
+                         combined.Contains("flak") ||
+                         combined.Contains("spaag") ||
+                         combined.Contains("shilka") ||
+                         combined.Contains("tunguska") ||
+                         combined.Contains("gepard") ||
+                         combined.Contains("vulcan") ||
+                         combined.Contains("cannon") ||
+                         combined.Contains("gun");
+            if (isAAA)
+            {
+                return AlteredDestinationPlugin.AAATerminalMode.Value;
+            }
+            if (target is GroundVehicle || combined.Contains("vehicle") || combined.Contains("tank"))
+            {
+                return AlteredDestinationPlugin.SurfaceTerminalMode.Value;
+            }
+            if (combined.Contains("building") || combined.Contains("hangar") || combined.Contains("bunker") || combined.Contains("factory") || combined.Contains("depot") || combined.Contains("bridge") || combined.Contains("runway"))
+            {
+                return AlteredDestinationPlugin.BuildingTerminalMode.Value;
+            }
+            return TerminalMode.Vanilla;
         }
         public static bool Prefix(Missile __instance, ref GlobalPosition aimPoint, ref Vector3 targetVel)
         {
+            if (__instance == null || __instance.disabled || __instance.rb == null) return true;
             OpticalSeekerCruiseMissile cSeeker = seekerRef(__instance) as OpticalSeekerCruiseMissile;
             if (cSeeker != null)
             {
+                Unit targetUnit = seekerTargetRef(cSeeker) ?? missileTargetRef(__instance);
+                GlobalPosition targetPos = (targetUnit != null && !targetUnit.disabled) ? targetUnit.GlobalPosition() : aimPoint;
+                float distance = (targetPos - __instance.GlobalPosition()).magnitude;
+                SalvoMemberState salvoState = SalvoCoordinator.GetOrCreateState(__instance, cSeeker, targetUnit, targetPos);
                 bool isTerminal = terminalModeRef(cSeeker);
-                Unit earlyTarget = seekerTargetRef(cSeeker) ?? missileTargetRef(__instance);
-                bool isShip = IsShip(earlyTarget);
-                bool directNaval = AlteredDestinationPlugin.DirectNaval.Value && isShip;
-                if (isTerminal && directNaval && !neuteredSeekersCache.TryGetValue(cSeeker, out _))
+                bool hasActiveWaypoints = AlteredDestinationPlugin.MissileWaypoints.TryGetValue(__instance, out var wpData)
+                                          && wpData.waypoints.Count > 0;
+                if (isTerminal && !hasActiveWaypoints)
                 {
-                    TopAttack top = topAttackRef(cSeeker);
-                    if (top != null)
+                    TerminalMode configMode = AlteredDestinationPlugin.TerminalModeDefault.Value;
+                    TerminalMode effectiveMode = AlteredDestinationPlugin.SmartTerminalModeEnabled.Value
+                        ? ResolveSmartTerminalMode(targetUnit, cSeeker, salvoState)
+                        : configMode;
+                    if (AlteredDestinationPlugin.Verbose && !loggedTerminalModeCache.TryGetValue(cSeeker, out _))
                     {
-                        top.Amount = 0f;
-                        top.Active = false;
+                        loggedTerminalModeCache.Add(cSeeker, new StrongBox<bool>(true));
+                        string targetName = targetUnit != null ? targetUnit.unitName : "unknown";
+                        AlteredDestinationPlugin.Log($"[TerminalMode] {__instance.unitName} vs {targetName}: config={configMode}, resolved={effectiveMode}.");
                     }
-                    JinkEvasion jink = jinkRef(cSeeker);
-                    if (jink != null) jink.amount = 0f;
-                    neuteredSeekersCache.Add(cSeeker, new StrongBox<bool>(true));
+                    if (effectiveMode != TerminalMode.Vanilla && !neuteredSeekersCache.TryGetValue(cSeeker, out _))
+                    {
+                        TopAttack top = topAttackRef(cSeeker);
+                        if (top != null)
+                        {
+                            top.Amount = 0f;
+                            top.Active = false;
+                        }
+                        JinkEvasion jink = jinkRef(cSeeker);
+                        if (jink != null)
+                        {
+                            jink.amount = 0f;
+                        }
+                        neuteredSeekersCache.Add(cSeeker, new StrongBox<bool>(true));
+                    }
+                    if (targetUnit != null)
+                    {
+                        if (targetPartRef(cSeeker) == null)
+                        {
+                            targetPartRef(cSeeker) = targetUnit.transform;
+                        }
+                        if (targetUnit.rb != null)
+                        {
+                            targetVel = targetUnit.rb.velocity;
+                            targetVel.y = 0f;
+                        }
+                    }
+                    aimPoint.x = targetPos.x;
+                    aimPoint.z = targetPos.z;
+                    TerminalGuidance.ApplyTerminalEvasion(__instance, salvoState, targetPos, distance, ref aimPoint, effectiveMode, IsShip(targetUnit));
+                    TerminalGuidance.ApplyFloorGuard(__instance, distance, ref aimPoint);
+                    TerminalGuidance.ApplyFinalHeadingAlignment(__instance, targetPos, distance);
+                    FlareScreenDispenser.UpdateTerminalFlares(salvoState, __instance, distance);
+                    MissileJammer.UpdateJamming(salvoState, __instance, targetUnit);
+                    return true;
                 }
                 float cruiseAltitude = CruiseAltitudeRegistry.GetCruiseAltitude(__instance, altitudeTargetRef(cSeeker));
                 altitudeTargetRef(cSeeker) = cruiseAltitude;
-                Unit targetUnit = earlyTarget;
-                if (targetPartRef(cSeeker) == null && targetUnit != null)
+                SalvoCoordinator.UpdateThrottle(__instance, salvoState, targetPos);
+                FlareScreenDispenser.UpdateTerminalFlares(salvoState, __instance, distance);
+                MissileJammer.UpdateJamming(salvoState, __instance, targetUnit);
+                if (!MissileUtil.IsBoosting(__instance))
                 {
-                    targetPartRef(cSeeker) = targetUnit.GetRandomPart();
-                }
-                if (directNaval && isTerminal && targetUnit != null)
-                {
-                    GlobalPosition tPos = targetUnit.GlobalPosition();
-                    aimPoint.x = tPos.x;
-                    aimPoint.z = tPos.z;
-                    aimPoint.y = __instance.GlobalPosition().y;
-                    if (targetUnit.rb != null)
-                    {
-                        targetVel = targetUnit.rb.velocity;
-                        targetVel.y = 0f;
-                    }
-                    ApplyCounterPitch(__instance);
+                    TerminalGuidance.ApplyFloorGuard(__instance, distance, ref aimPoint);
                 }
                 return true;
             }

@@ -40,16 +40,16 @@
       <HintPath>..\..\COMPILER_HERE\game\UnityEngine.UI.dll</HintPath>
       <Private>false</Private>
     </Reference>
-    <Reference Include="Rewired_Core" Publicize="True">
+    <Reference Include="Rewired_Core">
       <HintPath>..\..\COMPILER_HERE\game\Rewired_Core.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="Newtonsoft.Json">
-      <HintPath>..\..\COMPILER_HERE\game\Newtonsoft.Json.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="Mirage">
       <HintPath>..\..\COMPILER_HERE\game\Mirage.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="InputFramework">
+      <HintPath>..\..\COMPILER_HERE\game\InputFramework.dll</HintPath>
       <Private>false</Private>
     </Reference>
   </ItemGroup>
